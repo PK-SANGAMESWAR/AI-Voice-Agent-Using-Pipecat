@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.162.0",
+    "inferedge-moss>=1.0.0b19",
     "ipykernel>=7.4.0",
+    "moss>=1.0.0",
     "pipecat-ai[runner]>=1.15.0",
 ]
