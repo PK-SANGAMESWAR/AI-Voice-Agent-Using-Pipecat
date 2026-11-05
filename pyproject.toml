@@ -9,5 +9,5 @@ dependencies = [
     "inferedge-moss>=1.0.0b19",
     "ipykernel>=7.4.0",
     "moss>=1.0.0",
-    "pipecat-ai[runner]>=1.15.0",
+    "pipecat-ai[runner,webrtc]>=1.15.0",
 ]
