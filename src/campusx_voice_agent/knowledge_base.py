@@ -5,11 +5,12 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from campusx_voice_agent.config import DATA_DIR
 
+_IST = timezone(timedelta(hours=5, minutes=30), "IST")
 SUPPORTED_EXTENSIONS = {".md", ".txt"}
 DEFAULT_KB_DIR = DATA_DIR / "knowledge_base"
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
@@ -49,10 +50,16 @@ def _title_for(path: Path, text: str) -> str:
 
 
 def _sections(text: str) -> list[str]:
+    """Split on top-level `# ` headings so each topic stays whole.
+
+    Sub-headings stay inside their parent: e.g. "Course Curriculum" keeps all of its
+    numbered modules together, so one search can answer "what topics are covered?"
+    instead of returning fragments that send the LLM back to search again.
+    """
     chunks: list[str] = []
     current: list[str] = []
     for line in text.splitlines():
-        if line.startswith("#") and current:
+        if line.startswith("# ") and current:
             chunks.append("\n".join(current).strip())
             current = [line]
         else:
@@ -62,7 +69,7 @@ def _sections(text: str) -> list[str]:
     return [chunk for chunk in chunks if chunk]
 
 
-def _compact(text: str, max_chars: int = 900) -> str:
+def _compact(text: str, max_chars: int = 3000) -> str:
     compacted = re.sub(r"\s+", " ", text).strip()
     if len(compacted) <= max_chars:
         return compacted
@@ -81,7 +88,7 @@ def _score(query: str, query_tokens: set[str], text: str) -> int:
 def search_knowledge_base(
     query: str,
     *,
-    limit: int = 4,
+    limit: int = 3,
     kb_dir: Path | None = None,
 ) -> dict[str, object]:
     """Search local CampusX knowledge files and return short verified snippets."""
@@ -90,7 +97,7 @@ def search_knowledge_base(
     base_result: dict[str, object] = {
         "query": cleaned_query,
         "knowledge_base_dir": str(root),
-        "current_date": date.today().isoformat(),
+        "current_date": datetime.now(_IST).date().isoformat(),
         "timezone": "Asia/Kolkata",
     }
 

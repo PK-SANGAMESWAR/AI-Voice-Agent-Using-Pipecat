@@ -123,6 +123,7 @@ async def _sync_existing_moss_index(client, index_name: str, documents) -> None:
     )
     await client.add_docs(name=index_name, docs=documents)
 
+
 def _load_documents():
     DocumentInfo, _ = _import_moss_client_types()
     markdown_files = sorted(KNOWLEDGE_DIR.glob("*.md"))
@@ -178,4 +179,8 @@ async def create_moss_index() -> None:
 
 def main() -> None:
     asyncio.run(create_moss_index())
+
+
+if __name__ == "__main__":
+    main()
 

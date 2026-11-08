@@ -8,7 +8,9 @@ import os
 import re
 import sqlite3
 import uuid
-from datetime import date, datetime, time, timedelta
+from collections.abc import Generator
+from contextlib import contextmanager
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 
 from pipecat.services.llm_service import FunctionCallParams
@@ -87,6 +89,11 @@ answer confidently from memory. Search before ever saying "I'm not sure" or "I c
 If the search returns no relevant result, say you could not verify it and direct the caller to
 CampusX support.
 
+Search at most once per caller question: pass the caller's question as the query, then answer
+from the returned snippets. Each result already contains a whole section, so do not run extra
+searches to rephrase or expand the same question. Search again only when the caller asks about
+a different topic. Every tool call adds a noticeable pause to the live call.
+
 Use `get_available_guidance_slots` and `book_free_guidance_session` only if a caller explicitly
 asks you to book a free 20-minute guidance session.
 Speak in short, warm, natural sentences without markdown.
@@ -155,6 +162,9 @@ Use the knowledge base to get updated information without changing your core per
 
 _EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _SLOT_TIMES = (time(11, 0), time(16, 0), time(19, 0))
+# India has no daylight saving time, so a fixed UTC+05:30 offset is exact.
+IST = timezone(timedelta(hours=5, minutes=30), "IST")
+
 
 async def search_campusx_knowledge_base(
     params: FunctionCallParams,
@@ -166,6 +176,7 @@ async def search_campusx_knowledge_base(
         query: The caller's question or the CampusX topic to verify.
     """
     await params.result_callback(search_knowledge_base(query))
+
 
 def _database_path() -> Path:
     configured = os.getenv("GUIDANCE_DB_PATH")
@@ -204,18 +215,27 @@ def _ensure_bookings_schema(connection: sqlite3.Connection) -> None:
     connection.commit()
 
 
-def _connect() -> sqlite3.Connection:
+
+@contextmanager
+def _connect() -> Generator[sqlite3.Connection]:
+    """Open the bookings DB, commit on success, roll back on error, always close."""
     path = _database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path)
-    connection.row_factory = sqlite3.Row
-    _ensure_bookings_schema(connection)
-    return connection
+    try:
+        connection.row_factory = sqlite3.Row
+        _ensure_bookings_schema(connection)
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def _future_slots(days: int = 7) -> list[tuple[datetime, str]]:
     slots: list[tuple[datetime, str]] = []
-    today = date.today()
+    # Slots are advertised in IST, so build them from the IST calendar date rather
+    # than the host machine's local date.
+    today = datetime.now(IST).date()
     for day_offset in range(1, days + 1):
         slot_date = today + timedelta(days=day_offset)
         if slot_date.weekday() == 6:

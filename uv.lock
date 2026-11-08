@@ -19,7 +19,7 @@ wheels = [
 [[package]]
 name = "ai-voice-agent-using-pipecat"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "inferedge-moss" },

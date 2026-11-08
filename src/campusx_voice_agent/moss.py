@@ -2,7 +2,7 @@
 
 The community `pipecat-moss` package currently targets older Pipecat frame names.
 This module keeps the same idea but implements the tiny processor locally against
-Pipecat 1.6's `LLMContextFrame`.
+Pipecat's `LLMContextFrame`.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from loguru import logger
-from pipecat.frames.frames import ErrorFrame, Frame, LLMContextFrame, MetricsFrame
+from pipecat.frames.frames import Frame, LLMContextFrame, MetricsFrame
 from pipecat.metrics.metrics import ProcessingMetricsData
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
@@ -53,6 +53,7 @@ class MossContextProcessor(FrameProcessor):
         self._alpha = alpha
         self._system_prompt = system_prompt
         self._last_query: str | None = None
+        self._injected_message: dict[str, Any] | None = None
 
     def can_generate_metrics(self) -> bool:
         return True
@@ -80,15 +81,30 @@ class MossContextProcessor(FrameProcessor):
             search_result = await self._retrieve(latest_user_text)
             documents = getattr(search_result, "docs", []) or []
             logger.debug("{}: Moss returned {} documents", self, len(documents))
+            # Keep only the passages for the current turn; otherwise every turn
+            # appends another system message and the context grows without bound.
+            self._remove_injected_message(frame.context)
             if documents:
-                frame.context.add_message(
-                    {"role": "system", "content": self._format_documents(documents)}
-                )
+                self._injected_message = {
+                    "role": "system",
+                    "content": self._format_documents(documents),
+                }
+                frame.context.add_message(self._injected_message)
             await self.push_frame(frame, direction)
         except Exception as exc:
             logger.exception("{}: Moss retrieval failed: {}", self, exc)
-            await self.push_error(ErrorFrame(error=f"{self} retrieval error: {exc}"))
+            await self.push_error(f"{self} retrieval error: {exc}", exception=exc)
             await self.push_frame(frame, direction)
+
+    def _remove_injected_message(self, context) -> None:
+        previous = self._injected_message
+        self._injected_message = None
+        if previous is None:
+            return
+        messages = context.get_messages()
+        remaining = [message for message in messages if message is not previous]
+        if len(remaining) != len(messages):
+            context.set_messages(remaining)
 
     async def _retrieve(self, query: str):
         from inferedge_moss import QueryOptions

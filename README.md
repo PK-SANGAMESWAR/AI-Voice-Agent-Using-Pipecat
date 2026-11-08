@@ -43,13 +43,15 @@ OPENAI_TTS_VOICE=nova
 
 ## Run the voice agent
 
-Start the development runner from the repository root:
+Start the development runner:
 
 ```powershell
-uv run python -m pipecat.runner.run src/campusx_voice_agent/agent.py
+uv run python -m campusx_voice_agent.agent
 ```
 
-Open the local URL printed by the runner in a browser, allow microphone access, and start a conversation. The agent requires `OPENAI_API_KEY`. If Moss credentials are missing, it continues without semantic retrieval and uses the local knowledge-base search tool when it needs CampusX facts.
+Pipecat's runner finds the `bot()` function on the module that is executed, so run the agent module itself. Running `python -m pipecat.runner.run` directly does not work: it accepts no bot-file argument, and every session fails with "Could not find 'bot' function". Runner options such as `--port 7861` can be appended.
+
+Open the local URL printed by the runner (default `http://localhost:7860`) in a browser, allow microphone access, and start a conversation. The agent requires `OPENAI_API_KEY`. If Moss credentials are missing, it continues without semantic retrieval and uses the local knowledge-base search tool when it needs CampusX facts.
 
 ## Knowledge sources
 
@@ -77,9 +79,15 @@ The agent asks for the caller’s name, email, learning goal, and preferred time
 
 Available slots are generated for the next seven days, excluding Sundays, at 11:00 AM, 4:00 PM, and 7:00 PM India Standard Time. Existing reservations are excluded. Booking data is local to this app; it is not sent to a scheduling service.
 
+To view saved bookings:
+
+```powershell
+uv run python -m campusx_voice_agent.bookings
+```
+
 ## Learning stages
 
-The [`stages`](stages) directory contains numbered, progressively built examples, from an empty project through transport and audio frames, STT, turn handling, LLM responses, TTS, Moss retrieval, conversation memory, and the final booking agent. The integrated package implementation is in [`src/campusx_voice_agent`](src/campusx_voice_agent).
+The [`stages`](stages) directory contains numbered, progressively built examples, from an empty project through transport and audio frames, STT, turn handling, LLM responses, TTS, Moss retrieval, conversation memory, and the final booking agent. Run a stage directly, for example `uv run python stages/03_turn_detection_and_context.py`. Stages 07–10 require Moss credentials and an index built with stage 06 or `campusx_voice_agent.moss_index`. The integrated package implementation is in [`src/campusx_voice_agent`](src/campusx_voice_agent).
 
 ## Project layout
 
@@ -91,7 +99,9 @@ stages/                    Numbered Pipecat learning examples
 
 ## Troubleshooting
 
+- **"Failed to start session" in the browser:** Start the agent with `uv run python -m campusx_voice_agent.agent`, not `python -m pipecat.runner.run`. If it still fails, check the terminal for an OpenAI `401`/`expired_secret_key` error, which means the API key must be replaced.
 - **Missing `OPENAI_API_KEY`:** Add it to `.env.local` and restart the runner.
+- **Irrelevant answers when Moss is enabled:** `MOSS_INDEX_NAME` must point at an index built from `data/knowledge_base` (default `campusx-voice-agent-knowledge`). Retrieved passages are injected into every turn.
 - **Moss retrieval unavailable:** Check the three Moss environment variables and confirm the configured index exists. The agent can still run without Moss.
 - **Browser has no audio:** Allow microphone access and use a browser that supports WebRTC.
 - **No verified answer found:** Add or update the relevant Markdown or text document under `data/knowledge_base`.

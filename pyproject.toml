@@ -1,7 +1,7 @@
 [project]
 name = "ai-voice-agent-using-pipecat"
 version = "0.1.0"
-description = "Add your description here"
+description = "Real-time CampusX voice agent built with Pipecat, OpenAI, and optional Moss retrieval"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -11,3 +11,16 @@ dependencies = [
     "moss>=1.0.0",
     "pipecat-ai[runner,webrtc]>=1.15.0",
 ]
+
+[project.scripts]
+campusx-moss-index = "campusx_voice_agent.moss_index:main"
+campusx-bookings = "campusx_voice_agent.bookings:show_bookings"
+
+# Install src/campusx_voice_agent into the environment so `python -m
+# campusx_voice_agent.<module>` works from any directory after `uv sync`.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/campusx_voice_agent"]

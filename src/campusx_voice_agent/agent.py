@@ -33,7 +33,6 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     # llm_model = os.getenv("OPENAI_LLM_MODEL", "gpt-5-nano")
     llm_model = os.getenv("OPENAI_LLM_MODEL", "gpt-5")
 
-
     stt = OpenAIRealtimeSTTService(
         api_key=os.environ["OPENAI_API_KEY"],
         settings=OpenAIRealtimeSTTService.Settings(
@@ -57,8 +56,16 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         ),
     )
 
+    # Speak the filler at most once per caller turn; a turn may chain several tool
+    # calls and the caller should not hear "one moment" repeatedly.
+    filler_spoken = False
+
     @llm.event_handler("on_function_calls_started")
     async def on_function_calls_started(service, function_calls):
+        nonlocal filler_spoken
+        if filler_spoken:
+            return
+        filler_spoken = True
         await tts.queue_frame(
             TTSSpeakFrame("One moment while I check that.", append_to_context=False)
         )
@@ -68,6 +75,11 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         context,
         user_params=make_user_turn_params(interruptions=True),
     )
+
+    @user_aggregator.event_handler("on_user_turn_stopped")
+    async def on_user_turn_stopped(aggregator, strategy, message):
+        nonlocal filler_spoken
+        filler_spoken = False
     moss_retrieval = await make_moss_retrieval_processor()
 
     processors = [
@@ -100,3 +112,11 @@ async def bot(runner_args: RunnerArguments):
     """WebRTC bot entry point used by Pipecat's development runner."""
     transport = await make_transport(runner_args)
     await run_bot(transport, runner_args)
+
+
+if __name__ == "__main__":
+    # Pipecat's runner discovers `bot()` on the `__main__` module, so this file must
+    # be the one executed: `uv run python -m campusx_voice_agent.agent`.
+    from pipecat.runner.run import main
+
+    main()
